@@ -1,4 +1,5 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
 import jwt
 import requests
 from Crypto.Cipher import AES
@@ -15,6 +16,7 @@ import json
 import time
 import urllib3
 import warnings
+import os
 
 # -----------------------------
 # Security Warnings Disable
@@ -24,6 +26,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 warnings.filterwarnings("ignore", category=UserWarning, message="Unverified HTTPS request")
 
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
 # -----------------------------
 # AES Configuration
@@ -592,6 +595,168 @@ def oauth_guest():
 @app.route('/health', methods=['GET'])
 def health_check():
     return jsonify({"status": "healthy", "service": "FreeFire-API"}), 200
+
+@app.route('/status', methods=['GET'])
+def status_check():
+    return jsonify({
+        "status": "operational",
+        "service": "FreeFire-API",
+        "version": "1.0.0",
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }), 200
+
+@app.route('/version', methods=['GET'])
+def version_info():
+    return jsonify({
+        "name": "FreeFire API Manager",
+        "version": "1.0.0",
+        "description": "API for managing FreeFire accounts and friends"
+    }), 200
+
+@app.route('/metrics', methods=['GET'])
+def metrics():
+    # This is a simplified metrics endpoint
+    # In a production environment, you might want to track actual metrics
+    import psutil
+    import time
+    
+    # Get system metrics
+    cpu_percent = psutil.cpu_percent(interval=1)
+    memory = psutil.virtual_memory()
+    
+    return jsonify({
+        "service": "FreeFire-API",
+        "uptime": time.time(),
+        "cpu_usage": f"{cpu_percent}%",
+        "memory_usage": f"{memory.percent}%",
+        "memory_available": f"{memory.available / (1024*1024):.2f} MB",
+        "memory_total": f"{memory.total / (1024*1024):.2f} MB"
+    }), 200
+
+@app.route('/info', methods=['GET'])
+def info():
+    return jsonify({
+        "name": "FreeFire API Manager",
+        "description": "A powerful API for managing FreeFire accounts and friends",
+        "endpoints": {
+            "friend_management": ["/add_friend", "/remove_friend"],
+            "player_info": ["/get_player_info"],
+            "authentication": ["/token"],
+            "utilities": ["/health", "/status", "/version", "/metrics", "/info"]
+        },
+        "version": "1.0.0",
+        "documentation": "See README.md for detailed API documentation"
+    }), 200
+
+# -----------------------------
+# Proxy Endpoints for Remote APIs
+# -----------------------------
+@app.route('/proxy/add_friend', methods=['GET'])
+def proxy_add_friend():
+    """Proxy endpoint for adding friends"""
+    try:
+        # Get parameters from request
+        uid = request.args.get('uid')
+        password = request.args.get('password')
+        friend_uid = request.args.get('friend_uid')
+        server_name = request.args.get('server_name')
+        
+        # Validate required parameters
+        if not uid or not password or not friend_uid:
+            return jsonify({
+                "error": "Missing required parameters: uid, password, and friend_uid are required"
+            }), 400
+        
+        # Build URL for remote API
+        params = {
+            'uid': uid,
+            'password': password,
+            'friend_uid': friend_uid
+        }
+        
+        if server_name:
+            params['server_name'] = server_name
+        
+        # Make request to remote API
+        remote_url = 'https://danger-add-friend.vercel.app/adding_friend'
+        response = requests.get(remote_url, params=params, timeout=30)
+        
+        # Return response from remote API
+        try:
+            # Try to parse as JSON
+            data = response.json()
+            return jsonify(data), response.status_code
+        except:
+            # If not JSON, return as text
+            return response.text, response.status_code
+            
+    except requests.exceptions.Timeout:
+        return jsonify({"error": "Request timeout when connecting to remote API"}), 504
+    except requests.exceptions.RequestException as e:
+        return jsonify({"error": f"Error connecting to remote API: {str(e)}"}), 502
+    except Exception as e:
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+@app.route('/proxy/remove_friend', methods=['GET'])
+def proxy_remove_friend():
+    """Proxy endpoint for removing friends"""
+    try:
+        # Get parameters from request
+        uid = request.args.get('uid')
+        password = request.args.get('password')
+        friend_uid = request.args.get('friend_uid')
+        server_name = request.args.get('server_name')
+        
+        # Validate required parameters
+        if not uid or not password or not friend_uid:
+            return jsonify({
+                "error": "Missing required parameters: uid, password, and friend_uid are required"
+            }), 400
+        
+        # Build URL for remote API
+        params = {
+            'uid': uid,
+            'password': password,
+            'friend_uid': friend_uid
+        }
+        
+        if server_name:
+            params['server_name'] = server_name
+        
+        # Make request to remote API
+        remote_url = 'https://danger-add-friend.vercel.app/remove_friend'
+        response = requests.get(remote_url, params=params, timeout=30)
+        
+        # Return response from remote API
+        try:
+            # Try to parse as JSON
+            data = response.json()
+            return jsonify(data), response.status_code
+        except:
+            # If not JSON, return as text
+            return response.text, response.status_code
+            
+    except requests.exceptions.Timeout:
+        return jsonify({"error": "Request timeout when connecting to remote API"}), 504
+    except requests.exceptions.RequestException as e:
+        return jsonify({"error": f"Error connecting to remote API: {str(e)}"}), 502
+    except Exception as e:
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+# -----------------------------
+# Static File Serving
+# -----------------------------
+@app.route('/')
+def index():
+    if os.path.exists('index.html'):
+        return send_from_directory('.', 'index.html')
+    return jsonify({"message": "FreeFire API is running. Create index.html to serve frontend."})
+
+@app.route('/<path:path>')
+def static_files(path):
+    if os.path.exists(os.path.join('.', path)):
+        return send_from_directory('.', path)
+    return jsonify({"error": "File not found"}), 404
 
 # -----------------------------
 # Run Server
