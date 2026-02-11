@@ -19,7 +19,7 @@ import warnings
 import os
 
 # -----------------------------
-# Security Warnings Disable
+# Security Warnings Disablee
 # -----------------------------
 # HTTPS warnings disable karo
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
